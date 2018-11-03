@@ -30,7 +30,7 @@ katrina$failure <- ifelse(katrina$survive == '1', 0,1)
 # kphaz.fit() has the same arguments as Surv()
 katrina_haz <- with(katrina, kphaz.fit(hour49, failure))
 # and we plot it with kphaz.plot()
-kphaz.plot(katrina_haz)
+kphaz.plot(katrina_haz, main="Hazard Function")
 
 ### cumulative hazard functions ###
 ggsurvplot(katrina_fit, fun = "cumhaz", palette = "grey")
