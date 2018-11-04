@@ -5,6 +5,24 @@ library(muhaz)
 
 katrina <- fread('C:\\Users\\gavin\\Desktop\\katrina.csv')
 
+### Descriptive Statistics ###
+
+#Read in data and create a seperate dataset grouped by reason called grouped_katrina
+katrina <- read_csv('katrina.csv')
+
+grouped_katrina <- group_by(katrina, reason)
+
+#produce summary statistics for each failure reason
+#Total num survive and total percent survived are statistics for the 
+#entire dataset and not each reason
+
+pump_summary <- summarise(grouped_katrina, 
+          percent_of_pumps = n()/nrow(katrina),
+          median_survival_time = median(hour),
+          total_num_in_cat = n(), 
+          total_num_survive = length(which(katrina["survive"]==1)),
+          total_percent_survived = total_num_survive/nrow(katrina))         
+
 with(katrina, Surv(time = hour, event = survive == 0))
 
 ### survival curve ###
