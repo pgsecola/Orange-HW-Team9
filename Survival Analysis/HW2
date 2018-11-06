@@ -1,0 +1,47 @@
+#############################
+####Survival Analysis HW2####
+#############################
+
+library(survival)
+library(survminer)
+install.packages("flexsurv")
+library(flexsurv)
+library(dplyr)
+
+pump<- read.csv("katrina.csv", header = TRUE)
+#fitting AFT models (weibull)
+fit1 <- flexsurvreg(Surv(hour, reason == 1) ~backup+ bridgecrane+ servo
+               +trashrack+ elevation+ slope+ age, data = pump, dist = "weibull")
+plot(fit1, type = "cumhaz", ci = TRUE, conf.int = FALSE, las = 1, bty = "n",
+     xlab = "hour", ylab = "cumulative hazard", main = "Weibull Distribution")
+
+#exponential
+fit2 <- flexsurvreg(Surv(hour, reason == 1) ~backup+ bridgecrane+ servo
+                    +trashrack+ elevation+ slope+ age, data = pump, dist = "exponential")
+plot(fit2, type = "cumhaz", ci = TRUE, conf.int = FALSE, las = 1, bty = "n",
+     xlab = "hour", ylab = "cumulative hazard", main = "exponential Distribution")
+
+#lognormal
+fit3 <- flexsurvreg(Surv(hour, reason == 1) ~backup+ bridgecrane+ servo
+                    +trashrack+ elevation+ slope+ age, data = pump, dist = "lognormal")
+plot(fit3, type = "cumhaz", ci = TRUE, conf.int = FALSE, las = 1, bty = "n",
+     xlab = "hour", ylab = "cumulative hazard", main = "lognormal Distribution")
+#log-logistic
+fit4 <- flexsurvreg(Surv(hour, reason == 1) ~backup+ bridgecrane+ servo
+                    +trashrack+ elevation+ slope+ age, data = pump, dist = "llogis")
+plot(fit4, type = "cumhaz", ci = TRUE, conf.int = FALSE, las = 1, bty = "n",
+     xlab = "hour", ylab = "cumulative hazard", main = "log-logistic Distribution")
+
+##Weibull is the best distribution amongst those four distribution 
+fit_wb <- survreg(Surv(hour, reason == 1) ~backup+ bridgecrane+ servo
+                    +trashrack+ elevation+ slope+ age, data = pump, dist = "weibull")
+summary(fit_wb)
+exp(coef(fit_wb))
+
+#subset those pumps failed due to reason 1(flooding)
+pump_flooded <- subset(pump, reason=="1")
+pump_flooded[,9:56] <- NULL
+pump_flooded_sorted <- pump_flooded[order(pump_flooded$hour),] #sort by ascending hour
+pump_flooded_20 <- pump_flooded_sorted[1:20,]
+
+#upgrade servo first, if it's already upgraded, upgrade backup
