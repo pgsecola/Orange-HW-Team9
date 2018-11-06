@@ -1,1 +1,60 @@
+library(dplyr)
+library(doBy)
+library(bindr)
+library(ggplot2)
+library(histogram)
+library(stringr)
+library(tidyverse)
+library(tidyr)
+library(readxl)
+library(tibble)
+library(reshape2)
+library(lubridate)
+library(data.table)
+library(shiny)
+library(splitstackshape)
+library(text2vec)
+library(tidytext)
+library(wordcloud)
+library(SnowballC)
+
+
+reviews <- read.csv("C:\\Users\\pseco\\Downloads\\boston-airbnb-open-data\\reviews.csv")
+reviews$comments <- as.character(reviews$comments)
+reviews$reviewer_name <- as.character(reviews$reviewer_name)
+reviews$date <- as.Date(reviews$date, "%Y-%m-%d")
+
+glimpse(reviews)
+
+review_comments <- data_frame(txt = reviews$comments)
+
+review_token <- review_comments %>% unnest_tokens(word, txt) %>%
+  anti_join(stop_words) %>% mutate(word = str_extract(word, "[a-z']+")) %>% 
+  mutate(word_stem = wordStem(word, language="english")) %>%
+  filter(!is.na(word_stem)) %>%
+  count(word_stem, sort = TRUE) %>% mutate(p = n/sum(n)) %>% filter(p >0.001)
+
+u_words <- sort(unique(review_token$word_stem))
+
+bag_ow <- as.data.frame(matrix(0,nrow=3,ncol=length(u_words))) # make a matrix whose colums are the words
+# and each row is a state of the union address
+names(bag_ow) <- u_words
+
+for (ii in 1:nrow(review_token)) {
+  idx <- which(review_token$word_stem[ii] == u_words)
+  bag_ow[1,idx] = review_token$p[ii]
+}
+
+dist(bag_ow, diag = TRUE)
+dist2(as.matrix(bag_ow))
+
+#reweight completely ignoring there were other words
+rw_bag_ow = bag_ow
+qr_bag_ow = bag_ow
+for (ii in 1:nrow(bag_ow)){
+  rw_bag_ow[ii,] = bag_ow[ii,]/sum(bag_ow[ii,])
+  
+}
+
+hclust(dist2(as.matrix(bag_ow)),method = "complete")
 
