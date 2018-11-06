@@ -20,8 +20,37 @@ pump_summary <- summarise(grouped_katrina,
           percent_of_pumps = n()/nrow(katrina),
           median_survival_time = median(hour),
           total_num_in_cat = n(), 
+          median_age = median(age),
+          median_slope = median(slope),
+          slope_IQR = IQR(slope),
           total_num_survive = length(which(katrina["survive"]==1)),
-          total_percent_survived = total_num_survive/nrow(katrina))         
+          total_percent_survived = total_num_survive/nrow(katrina))
+          
+
+ggplot(katrina) +
+    geom_histogram(mapping = aes(x=age), binwidth = .2)
+
+ggplot(katrina) +
+  geom_histogram(mapping = aes(x=slope),binwidth = 1)
+
+ggplot(katrina) +
+  geom_histogram(mapping = aes(x=elevation),binwidth = 1)
+
+stats <- ggplot(katrina,  aes(as.factor(reason), slope)) +
+  geom_boxplot()
+
+stats_2 <- ggplot(katrina,  aes(as.factor(reason), age)) +
+  geom_boxplot()
+
+
+stats_3 <- ggplot(katrina,  aes(as.factor(reason), hour)) +
+  geom_boxplot()
+
+stats
+stats_2
+stats_3
+
+quantile(katrina$slope)      
 
 with(katrina, Surv(time = hour, event = survive == 0))
 
