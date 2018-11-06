@@ -56,5 +56,4 @@ for (ii in 1:nrow(bag_ow)){
   
 }
 
-hclust(dist2(as.matrix(bag_ow)),method = "complete")
 
