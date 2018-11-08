@@ -99,12 +99,12 @@ ggplot(cost_sim_1_norm,aes(cost_sim_1_norm$cost2019))+
   theme_bw()+ theme(plot.title = element_text(hjust = 0.5,size=22),         
   axis.title=element_text(size=18), axis.text = element_text(size=18,lineheight = 5))
 
-
-leased_acres = rnorm(n=12, mean=600, sd=50)
+#####################         HW2        ##################################
+leased_acres = rnorm(n=1, mean=600, sd=50)
 acre_cost = 960
-seismic_sections = rnorm(n=12, mean=3, sd=.35)
+seismic_sections = rnorm(n=1, mean=3, sd=.35)
 seismic_cost = 43000
-completion_cost = rnorm(n=12, mean=390000, sd=50000)
+completion_cost = rnorm(n=1, mean=390000, sd=50000)
 overhead = rtriangle(1, 172000, 279500, 215000)
 
 #need to add hw1 total to this
@@ -116,24 +116,36 @@ location <- log(m^2 / sqrt(s^2 + m^2))
 shape <- sqrt(log(1 + (s^2 / m^2)))
 #add correlation between these of 0.64
 
-ip = rlnorm(10000, meanlog = location, sdlog = shape)
+ip = rlnorm(15, meanlog = location, sdlog = shape)
 #ip = rlnorm(1000, meanlog = 420,sdlog = 120)
-mean(ip)
-sd(ip)
-hist(ip)
-decline_rate = runif(12, min = 0.15, max = 0.32)
+#mean(ip)
+#sd(ip)
+#hist(ip)
+decline_rate = runif(15, min = 0.15, max = 0.32)
 final_year_rate = (1-decline_rate)*ip
 oil_volume = (365*final_year_rate*ip)/2
 
 oil_prices = read_excel('Analysis_Data.xlsx', sheet = 1, skip = 2)
+
+price_proj = mapply(function(x,y,z) rtriangle(1,x,y,z), oil_prices$`Low Oil Price`, oil_prices$`High Oil Price`, oil_prices$`AEO2018 Reference`) 
+total_rev = price_proj[1:15]*oil_volume
+
 #calculate triangle dist from df in line above for each year
 
 nri = rnorm(1, mean = .75, sd = .2)
 
-oil_rev = oil_volume*oil_prices*nri
+oil_rev = total_rev*nri
 tax = 0.06
 final_rev = oil_rev*(1-tax)
 
-op_exp = nri = rnorm(12, mean = 2.25, sd = .3)
+op_exp = nri = rnorm(15, mean = 2.25, sd = .3)
+year_exp = oil_volume*op_exp
+
+year_profit = final_rev-year_exp
 
 
+vec = rep(1.1,15)
+wacc = vec^seq(1,15)
+all_years = year_profit/wacc
+total = sum(all_years)
+done = total-initial_exp
