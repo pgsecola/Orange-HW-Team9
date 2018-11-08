@@ -48,7 +48,7 @@ reviews$date <- as.Date(reviews$date, "%Y-%m-%d")
 
 glimpse(reviews)
 
-listings_imprtnt <- select(listings, c("listing_id","host_is_superhost",
+listings_imprtnt <- select(listings, c("id","host_is_superhost",
                        "neighbourhood_cleansed","latitude","longitude",
                        "property_type", "room_type","price", "weekly_price", "monthly_price",
                        "availability_365","review_scores_rating","review_scores_accuracy", "review_scores_value",
