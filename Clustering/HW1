@@ -48,6 +48,11 @@ reviews$date <- as.Date(reviews$date, "%Y-%m-%d")
 
 glimpse(reviews)
 
+listings_imprtnt <- select(listings, c("listing_id","host_is_superhost",
+                       "neighbourhood_cleansed","latitude","longitude",
+                       "property_type", "room_type","price", "weekly_price", "monthly_price",
+                       "availability_365","review_scores_rating","review_scores_accuracy", "review_scores_value",
+                       "reviews_per_month"))
 
 #Group reviews by their respective listing ids 
 #and extract those listings that have greater than 4 reviews
@@ -109,12 +114,4 @@ Boston_cluster_table <- data.frame(Listing_clust = km_clust$centers[,1],
                                    Latitude_clust = km_clust$centers[,2],
                                    Longitude_clust = km_clust$centers[,3])
 
-glimpse(listings)
-
-listings_2 %>% 
-subset(listings, select=c("listing_id","host_if_superhots"))
-                       #,"neighbourhood_cleansed ","latitude","longitude",
-                       #"property_type", "room_type","price", "weekly_price", "monthly_price",
-                       #"availability_365","review_scores_rating","reviews_scores_accuracy", "review_scores_value",
-                       #"reviews_per_month"]
 
