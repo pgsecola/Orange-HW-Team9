@@ -95,8 +95,7 @@ listings_combnd$std.lon <- scale(listings_combnd$longitude)
 #create Matrix with Standardized "avg score", "Long", "Lat" variables
 #Input Standardized cluster variables here
 
-toC<- cbind(listings_combnd$avg,listings_combnd$std.lat,listings_combnd$std.lon)
-
+toC<- cbind(listings_combnd$avg)
 #####KMeans Clustering##########
 #use toC matrix to determine the appropiate number of clusters
 
@@ -107,7 +106,7 @@ fviz_nbclust(toC, kmeans, method="silhouette") #4 cluster appropiate
 #clusters for listing sentiment, longitude, latitude
 #Output KMeans object
 
-km_clust <- kmeans(toC,4,nstart = 25)
+km_clust <- kmeans(toC,2,nstart = 25)
 
 #create Data Frame with location data and cluster information
 
@@ -150,24 +149,16 @@ register_google("AIzaSyBfqoxdvkwfRQnbhUEXchBzi6BXLoUSp-A")
 #    lon[ii] <- as.numeric(latLon[1])
 #    lat[ii] <- as.numeric(latLon[2])
 #}
-listing_k <-data.frame(listing_id = listings$id, lat = listings$latitude, lon = listings$longitude)
+
 #########################################
 # Get a Map of Boston
 #########################################
 
 map <- get_map(location ="Boston", zoom = 11)
-#map2 <- get_map(location = "Seattle", zoom = 11)
 
 #I want to find the Geo-location of these listings :-)
 
-cluster <- words_and_clusters %>% filter(group == 9) %>%
-  left_join(listing_k,"listing_id") %>%
-  distinct(listing_id,.keep_all = TRUE)
-
-#notice U of Washington Right in the middle
 ggmap(map, fullpage = TRUE) +
-  geom_point(data = cluster, aes(x = lon, y = lat), color = 'red', size = 2)
+  geom_point(data = Boston_cluster_table, aes(x =longitude, y = latitude), color = Boston_cluster_table$Cluster_ID, size = 2)
 
-ggmap(map2, fullpage = TRUE) +
-  geom_point(data = cluster, aes(x = lon, y = lat), color = 'red', size = 2)
 
