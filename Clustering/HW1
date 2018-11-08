@@ -8,17 +8,39 @@ library(tidyverse)
 library(tidyr)
 library(readxl)
 library(tibble)
+library(SASxport)
 library(reshape2)
+library(haven)
+library(fma)
+library(tseries)
+library(fma)
+library(tseries)
+library(expsmooth)
+library(lmtest)
+library(zoo)
+library(seasonal)
 library(lubridate)
 library(data.table)
+library(caret)
+library(corrplot)
 library(shiny)
 library(splitstackshape)
+library(gutenbergr)
 library(text2vec)
 library(tidytext)
 library(wordcloud)
 library(SnowballC)
+library(ggmap)
+library(factoextra)
+library(mclust)
 
+###########Hierarchical Clustering#######
 
+#Create Word Sentiment Score
+#Alter Variable Types
+
+nrc_total <- get_sentiments("afinn")
+listings <- read.csv("C:\\Users\\pseco\\Downloads\\boston-airbnb-open-data\\listings.csv")
 reviews <- read.csv("C:\\Users\\pseco\\Downloads\\boston-airbnb-open-data\\reviews.csv")
 reviews$comments <- as.character(reviews$comments)
 reviews$reviewer_name <- as.character(reviews$reviewer_name)
@@ -26,34 +48,73 @@ reviews$date <- as.Date(reviews$date, "%Y-%m-%d")
 
 glimpse(reviews)
 
-review_comments <- data_frame(txt = reviews$comments)
 
-review_token <- review_comments %>% unnest_tokens(word, txt) %>%
-  anti_join(stop_words) %>% mutate(word = str_extract(word, "[a-z']+")) %>% 
-  mutate(word_stem = wordStem(word, language="english")) %>%
-  filter(!is.na(word_stem)) %>%
-  count(word_stem, sort = TRUE) %>% mutate(p = n/sum(n)) %>% filter(p >0.001)
+#Group reviews by their respective listing ids 
+#and extract those listings that have greater than 4 reviews
 
-u_words <- sort(unique(review_token$word_stem))
+rv <- reviews %>% group_by(listing_id) %>%
+  count(listing_id, sort = TRUE) %>% filter( n >= 4) %>% select(-"n")
 
-bag_ow <- as.data.frame(matrix(0,nrow=3,ncol=length(u_words))) # make a matrix whose colums are the words
-# and each row is a state of the union address
-names(bag_ow) <- u_words
+#break up the dataset's listing into individual words
+#join this dataset with rv, keeping only those listing IDs that have 4 or more
+# reviews remove all of the na values
 
-for (ii in 1:nrow(review_token)) {
-  idx <- which(review_token$word_stem[ii] == u_words)
-  bag_ow[1,idx] = review_token$p[ii]
-}
+new_reviews <- reviews %>%
+  group_by(listing_id) %>%
+  unnest_tokens(word, comments)  %>%
+  right_join(rv,by="listing_id") %>% filter(!is.na(word)) %>%
+  left_join(nrc_total,by="word") %>% filter(!is.na(score)) 
 
-dist(bag_ow, diag = TRUE)
-dist2(as.matrix(bag_ow))
 
-#reweight completely ignoring there were other words
-rw_bag_ow = bag_ow
-qr_bag_ow = bag_ow
-for (ii in 1:nrow(bag_ow)){
-  rw_bag_ow[ii,] = bag_ow[ii,]/sum(bag_ow[ii,])
-  
-}
+#Find the number of words scored
 
+score         <- new_reviews %>% group_by(listing_id) %>% mutate(sscore = sum(score)) %>% distinct(listing_id,sscore)
+nwords        <- new_reviews %>% group_by(listing_id) %>% count(listing_id) 
+
+#compute Avg score for each listing and Standardize the Score
+
+complete <- nwords %>% left_join(score,"listing_id") %>% mutate(avg = sscore/n)
+
+complete$avg <- scale(complete$avg) #standardize the score
+
+#Change variable from "id" to "listing_id" in listings table
+
+names(listings)[1] <- "listing_id"
+
+#Join Listings and Review Tables by Listing_id and Scale Long & Lat
+
+combined <- complete %>% left_join(listings,"listing_id")
+combined$std.lat <- scale(combined$latitude)
+combined$std.lon <- scale(combined$longitude)
+
+#create Matrix with Standardized "avg score", "Long", "Lat" variables
+
+toC<- cbind(combined$avg,combined$std.lat,combined$std.lon)
+
+#####KMeans Clustering##########
+#use toC matrix to determine the appropiate number of clusters
+
+fviz_nbclust(toC, kmeans, method="wss") #can't tell
+fviz_nbclust(toC, kmeans, method="silhouette") #4 cluster appropiate
+
+#perform KMeans analysis using optimal number of clusters (4)
+#clusters for listing sentiment, longitude, latitude
+#Output KMeans object
+
+km_clust <- kmeans(toC,4,nstart = 25)
+
+#create Data Frame with location data and cluster information
+
+Boston_cluster_table <- data.frame(Listing_clust = km_clust$centers[,1],
+                                   Latitude_clust = km_clust$centers[,2],
+                                   Longitude_clust = km_clust$centers[,3])
+
+glimpse(listings)
+
+listings_2 %>% 
+subset(listings, select=c("listing_id","host_if_superhots"))
+                       #,"neighbourhood_cleansed ","latitude","longitude",
+                       #"property_type", "room_type","price", "weekly_price", "monthly_price",
+                       #"availability_365","review_scores_rating","reviews_scores_accuracy", "review_scores_value",
+                       #"reviews_per_month"]
 
