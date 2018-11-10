@@ -55,7 +55,7 @@ Est_dens <- rkde(fhat=kde(combined, h=0.17411), n=1000)
 hist(Est_dens, breaks=50, main='Estimated One Year Value Distribution', xlab='Final Value')
 
 
-ntimes = 1000000
+ntimes = 10000
 cost2019 = rep(NA, ntimes)
 Density.x4 <- density(combined, bw="SJ-ste")
 for(j in 1:ntimes){
@@ -77,7 +77,7 @@ ggplot(cost_sim_1,aes(cost_sim_1$cost2019))+
   theme_bw()+ theme(plot.title = element_text(hjust = 0.5,size=22),         
   axis.title=element_text(size=18), axis.text = element_text(size=18,lineheight = 5))
 
-ntimes = 1000000
+ntimes = 10000
 #ntimes = 100
 cost2019_norm = rep(NA, ntimes)
 for(j in 1:ntimes){
@@ -109,6 +109,28 @@ overhead = rtriangle(1, 172000, 279500, 215000)
 
 #need to add hw1 total to this
 initial_exp = leased_acres*acre_cost+seismic_sections*seismic_cost+completion_cost+overhead
+
+times = 1000
+for(j in 1:times){
+  Est.Leased <- rnorm(1, 600, 50) * acre_cost
+  Est.Seismic <-rnorm(1, 3, .35) * seismic_cost
+  Est.Overhead <-rtriangle(1, 172000, 279500, 215000)
+  intital_exp[j] <- Est.Overhead + Est.Seismic + Est.Leased
+  
+  set.seed(j)
+  Est.x4 <-rnorm(n=6, mean=mean(combined), sd=sd(combined))
+  Est.x5<-rtriangle(3, -0.22 , -0.07, -0.0917)
+  Est.x6<-rtriangle(4, 0.02 , 0.06, 0.05)
+  x7=c(Est.x4,Est.x5,Est.x6,recursive=TRUE)
+  cost2019_norm[j]<-initial_cost*(prod(1+x7))
+  
+  total_exp[j] <- initial_exp + cost2019_norm
+}
+
+
+
+
+
 
 m = 420
 s = 120
