@@ -1,0 +1,212 @@
+library(dplyr)
+library(doBy)
+library(bindr)
+library(ggplot2)
+library(histogram)
+library(stringr)
+library(tidyverse)
+library(tidyr)
+library(readxl)
+library(tibble)
+library(SASxport)
+library(reshape2)
+library(haven)
+library(fma)
+library(tseries)
+library(fma)
+library(tseries)
+library(expsmooth)
+library(lmtest)
+library(zoo)
+library(seasonal)
+library(lubridate)
+library(data.table)
+library(caret)
+library(corrplot)
+library(shiny)
+library(splitstackshape)
+library(gutenbergr)
+library(text2vec)
+library(tidytext)
+library(wordcloud)
+library(SnowballC)
+library(ggmap)
+library(factoextra)
+library(mclust)
+
+
+########Data Prep############
+
+#Create Word Sentiment Score
+#Alter Variable Types
+
+nrc_total <- get_sentiments("afinn")
+listings <- read.csv("C:\\Users\\pseco\\Downloads\\boston-airbnb-open-data\\listings.csv")
+reviews <- read.csv("C:\\Users\\pseco\\Downloads\\boston-airbnb-open-data\\reviews.csv")
+reviews$comments <- as.character(reviews$comments)
+reviews$reviewer_name <- as.character(reviews$reviewer_name)
+reviews$date <- as.Date(reviews$date, "%Y-%m-%d")
+
+glimpse(reviews)
+
+listings_imprtnt <- select(listings, c("id","host_is_superhost",
+                                       "neighbourhood_cleansed","latitude","longitude",
+                                       "property_type", "room_type","price", "weekly_price", "monthly_price",
+                                       "availability_365","review_scores_rating","review_scores_accuracy", "review_scores_value",
+                                       "reviews_per_month"))
+
+#Group reviews by their respective listing ids 
+#and extract those listings that have greater than 4 reviews
+
+rv <- reviews %>% group_by(listing_id) %>%
+  count(listing_id, sort = TRUE) %>% filter( n >= 4) %>% select(-"n")
+
+#break up the dataset's listing into individual words
+#join this dataset with rv, keeping only those listing IDs that have 4 or more
+# reviews remove all of the na values
+
+new_reviews <- reviews %>%
+  group_by(listing_id) %>%
+  unnest_tokens(word, comments)  %>%
+  right_join(rv,by="listing_id") %>% filter(!is.na(word)) %>%
+  left_join(nrc_total,by="word") %>% filter(!is.na(score)) 
+
+
+#Find the number of words scored
+
+score         <- new_reviews %>% group_by(listing_id) %>% mutate(sscore = sum(score)) %>% distinct(listing_id,sscore)
+nwords        <- new_reviews %>% group_by(listing_id) %>% count(listing_id) 
+
+#compute Avg score for each listing and Standardize the Score
+
+listing_complt <- nwords %>% left_join(score,"listing_id") %>% mutate(avg = sscore/n)
+
+listing_complt$avg <- scale(listing_complt$avg) #standardize the score
+
+#Change variable from "id" to "listing_id" in listings table
+
+names(listings_imprtnt)[1] <- "listing_id"
+
+#Standardize Clustering input variables
+listings_combnd$price <- as.numeric(listings_combnd$price)
+
+listings_combnd <- listing_complt %>% left_join(listings_imprtnt,"listing_id")
+listings_combnd$std.lat <- scale(listings_combnd$latitude)
+listings_combnd$std.lon <- scale(listings_combnd$longitude)
+listings_combnd$avg.std <- scale(listings_combnd$avg)
+listings_combnd$std.reivew_scores_rating <- scale(listings_combnd$review_scores_rating)
+listings_combnd$price.std <- scale(listings_combnd$price)
+
+cor_matrix <- cor(select_if(listings_combnd, is.numeric), method = "pearson")
+corrplot(cor_matrix)
+
+plot(pairs(listings_combnd, lower.panel = NULL))
+
+
+#create Matrix with Standardized "avg score", "Long", "Lat" variables
+#Input Standardized cluster variables here
+
+toC<- cbind(listings_combnd$price.std, listings_combnd$avg.std, listings_combnd$std.reivew_scores_rating, listings_combnd$std.lon, listings_combnd$std.lat  )
+#####KMeans Clustering##########
+#use toC matrix to determine the appropiate number of clusters
+
+fviz_nbclust(toC, kmeans, method="wss") #can't tell
+fviz_nbclust(toC, kmeans, method="silhouette") #n cluster appropiate
+
+#perform KMeans analysis using optimal number of clusters 
+#clusters for listing sentiment, longitude, latitude
+#Output KMeans object
+
+km_clust <- kmeans(toC,3,nstart = 25)
+
+#create Data Frame with location data and cluster information
+
+Boston_cluster_table <- cbind.data.frame(listings_combnd,km_clust$cluster)
+names(Boston_cluster_table)[21] <- "Cluster_ID" 
+#####################################################
+#Geocode Location
+#####################################################
+# Need experimental version of ggmap
+# also need to download and install rtools off of the internet
+library(devtools)
+devtools::install_github("dkahle/ggmap", ref = "tidyup")
+
+#####################################################
+#TO DO THIS YOU NEED TO REGISTER TO A GOOGLE DEV ACCOUNT
+#AND PROVIDE YOUR OWN API KEY!!!!!
+#THEN YOU CAN GET A PRETTY MAP!
+# https://www.wpgmaps.com/documentation/creating-a-google-maps-api-key/
+# You will also have to get the geocode api enabled
+#####################################################
+library(readr)
+library(lubridate)
+library(ggplot2)
+library(ggmap)
+library(dplyr)
+library(data.table)
+library(ggrepel)
+
+
+register_google("AIzaSyBfqoxdvkwfRQnbhUEXchBzi6BXLoUSp-A")
+
+# uncomment to run
+# retrieves the lat and lon of each listing
+
+#strtAddress <- listings$street
+#lon<- matrix(0,nrow=length(strtAddress))
+#lat<- matrix(0,nrow=length(strtAddress))
+#for (ii in 1:length(strtAddress)){
+#    latLon <- geocode(strtAddress[ii],output="latlon")
+#    lon[ii] <- as.numeric(latLon[1])
+#    lat[ii] <- as.numeric(latLon[2])
+#}
+
+#########################################
+# Get a Map of Boston W/ Clusters
+#########################################
+
+map <- get_map(location ="Boston", zoom = 11)
+
+#I want to find the Geo-location of these listings :-)
+
+ggmap(map, fullpage = TRUE) +
+  geom_point(data = Boston_cluster_table, aes(x =longitude, y = latitude), color = Boston_cluster_table$`km_clust$cluster`, size = 2)
+
+#Extract Cluster centriods
+#Looking for Large 1st Column (High Price), Low 2nd and 3rd Column, other 2 doesn't matter unless you are wanting specific Neighboorhood
+
+km_clust$centers
+
+#####Create Table/Summary Statistics using Cluster ID and Listing
+#Subset by listing cluster ID of interest
+Boston_cluster_table$price <- as.numeric(Boston_cluster_table$price)
+Boston_cluster_table$weekly_price <- as.numeric(Boston_cluster_table$weekly_price)
+Boston_cluster_table$monthly_price <- as.numeric(Boston_cluster_table$monthly_price)
+Boston_cluster_table$sscore <- as.numeric(Boston_cluster_table$sscore)
+
+glimpse(Boston_cluster_table_2)
+
+#######Plot Clustered Data####
+
+hist(Boston_cluster_table_2$review_scores_rating)
+hist(Boston_cluster_table_2$avg)
+hist(Boston_cluster_table_2$price)   
+
+#Subset the clustered Boston data by specific variable values
+
+Boston_cluster_table_2 <- subset(Boston_cluster_table, Boston_cluster_table$`km_clust$cluster`==2 & Boston_cluster_table$avg<=0)
+
+
+                                               
+
+#####Summarise Clusted Data######
+
+Clust_Sum_tbl <- summarise(group_by(Boston_cluster_table_2, `km_clust$cluster`, listing_id), med_price = median(price),
+                                                                                           med_rating = median(review_scores_value),  
+                                                                                           scld_sentimnt_score = avg,
+                                                                                           neighborhood = neighbourhood_cleansed,
+                                                                                           avg_reviews = reviews_per_month)
+
+
+
+
