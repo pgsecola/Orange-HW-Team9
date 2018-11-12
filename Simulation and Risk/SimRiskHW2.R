@@ -9,52 +9,31 @@ simfile = read_excel('Analysis_Data.xlsx', sheet = 2, skip = 2)
 as.Date(simfile$Date, origin="1960-01-01")
 simfile$year = year(simfile$Date)
 
-#simfile[year >= "1990-01-01"]
-#simfile[simfile$year == 1990]
-
+#extract only years 1991-2006
 recent = filter(simfile, year >= "1990-12-31")
 recent = filter(recent, year <= "2006-12-31")
-oil_change = colnames(recent)[5]
-#mean(recent$`Arithmetic Return - Crude Oil`)
-typeof(recent$`Arithmetic Return - Crude Oil`)
+#oil_change = colnames(recent)[5]
+#convert columns to numeric type because they were read in as characters
 recent$`Arithmetic Return - Crude Oil`=  as.numeric(recent$`Arithmetic Return - Crude Oil`)
 recent$`Arithmetic Return - Natural Gas`=  as.numeric(recent$`Arithmetic Return - Natural Gas`)
 recent$`Arithmetic Return - Dry Well`=  as.numeric(recent$`Arithmetic Return - Dry Well`)
 
-#sd(recent$`Arithmetic Return - Crude Oil`)
-
+#get initial costs for 2006
 initial_cost = rowMeans(recent[16,2:4])
-#recent = filter(recent, year >= "1990-12-31")
-#dens2 <- density(row_avg, bw="SJ-ste")
 
-#All combined in one vector of 48 observations
+#All changes combined in one vector of 48 observations
 combined = c(recent$`Arithmetic Return - Crude Oil`,recent$`Arithmetic Return - Natural Gas`, recent$`Arithmetic Return - Dry Well`)
 
-sd(combined)
-dens <- density(combined, bw="SJ-ste")
-
-tri_dens <- density(combined, kernel = triangular)
-
+#checking for normality
 hist(combined, breaks = 10)
-
 shapiro.test(combined)
-
 ks.test(combined)
-
 ad.test(combined)
-
 qqplot(combined)
 
-sim_2012_15 <- rtriangle(3, -.22, -.07, -.0917)
+#create initial distribution
 
-sim_2015_18 <- rtriangle(3,.02, .06, .05)
-
-hist(sim_2015_18, breaks = 10)
-
-Est_dens <- rkde(fhat=kde(combined, h=0.17411), n=1000)
-hist(Est_dens, breaks=50, main='Estimated One Year Value Distribution', xlab='Final Value')
-
-
+#simulation loop to develop cost for 2019 using kernel density
 ntimes = 1000000
 cost2019 = rep(NA, ntimes)
 Density.x4 <- density(combined, bw="SJ-ste")
@@ -65,10 +44,10 @@ for(j in 1:ntimes){
   x7=c(Est.x4,Est.x5,Est.x6,recursive=TRUE)
   cost2019[j]<-initial_cost*(prod(1+x7))
 }
-#print(cost2019)
+
+#plotting and checking simulation results
 summary(cost2019)
 hist(cost2019, breaks=100, main='2019 cost estimating', xlab='Average Cost')
-
 cost_sim_1=as.data.frame(cost2019)
 ggplot(cost_sim_1,aes(cost_sim_1$cost2019))+
   geom_histogram(breaks=seq(0,20000,by=100),fill='skyblue2')+ 
@@ -77,8 +56,9 @@ ggplot(cost_sim_1,aes(cost_sim_1$cost2019))+
   theme_bw()+ theme(plot.title = element_text(hjust = 0.5,size=22),         
   axis.title=element_text(size=18), axis.text = element_text(size=18,lineheight = 5))
 
+
+#simulation loop to develop cost for 2019 using normal distribution
 ntimes = 1000000
-#ntimes = 100
 cost2019_norm = rep(NA, ntimes)
 for(j in 1:ntimes){
   set.seed(j)
@@ -88,9 +68,10 @@ for(j in 1:ntimes){
   x7=c(Est.x4,Est.x5,Est.x6,recursive=TRUE)
   cost2019_norm[j]<-initial_cost*(prod(1+x7))
 }
+
+#plotting and checking simulation results
 summary(cost2019_norm)
 hist(cost2019_norm, breaks=100, main='2019 cost estimating', xlab='Average Cost')
-sd(cost2019_norm)
 cost_sim_1_norm=as.data.frame(cost2019_norm)
 ggplot(cost_sim_1_norm,aes(cost_sim_1_norm$cost2019))+
   geom_histogram(breaks=seq(0,20000,by=100),fill='skyblue2')+ 
@@ -101,6 +82,8 @@ ggplot(cost_sim_1_norm,aes(cost_sim_1_norm$cost2019))+
 
 #####################         HW2        ##################################
 
+
+#using code from class to generate simulation for correlated inputs
 R <- matrix(data=cbind(1,0.64, 0.64, 1), nrow=2)
 U <- t(chol(R))
 
@@ -114,19 +97,25 @@ destandardize <- function(x.std, x){
   return(x.old)
 }
 
+#overall loop to get profit for finding a wet well
 ntimes = 100000
 done = rep(NA, ntimes)
 for(i in 1:ntimes){
+  #calculating initial expenses
   leased_acres = rnorm(n=1, mean=600, sd=50)
   acre_cost = 960
   seismic_sections = rnorm(n=1, mean=3, sd=.35)
   seismic_cost = 43000
   completion_cost = rnorm(n=1, mean=390000, sd=50000)
   overhead = rtriangle(1, 172000, 279500, 215000)
+  Est.x4 <-rnorm(n=6, mean=mean(combined), sd=sd(combined))
+  Est.x5<-rtriangle(3, -0.22 , -0.07, -0.0917)
+  Est.x6<-rtriangle(4, 0.02 , 0.06, 0.05)
+  x7=c(Est.x4,Est.x5,Est.x6,recursive=TRUE)
+  cost2019_norm<-initial_cost*(prod(1+x7))
+  initial_exp = leased_acres*acre_cost+seismic_sections*seismic_cost+completion_cost+overhead+cost2019_norm
   
-  #need to add hw1 total to this
-  initial_exp = leased_acres*acre_cost+seismic_sections*seismic_cost+completion_cost+overhead
-  
+  #calculating oil production/volume
   m = 6
   s = .28
   location <- log(m^2 / sqrt(s^2 + m^2))
@@ -140,33 +129,31 @@ for(i in 1:ntimes){
   final_year_rate = (1-decline_rate)*ip
   oil_volume = (365*final_year_rate*ip)/2
   
-  
+  #calculate oil prices
   oil_prices = read_excel('Analysis_Data.xlsx', sheet = 1, skip = 2)
+  price_proj = mapply(function(x,y,z) rtriangle(1,x,y,z), oil_prices$`Low Oil Price`, oil_prices$`High Oil Price`, oil_prices$`AEO2018 Reference`)
   
-  price_proj = mapply(function(x,y,z) rtriangle(1,x,y,z), oil_prices$`Low Oil Price`, oil_prices$`High Oil Price`, oil_prices$`AEO2018 Reference`) 
+  #calculate oil revenue
   total_rev = price_proj[1:15]*oil_volume
-  
-  #calculate triangle dist from df in line above for each year
-  print
   nri = rnorm(1, mean = .75, sd = .02)
   
   oil_rev = total_rev*nri
   tax = 0.06
   final_rev = oil_rev*(1-tax)
   
+  #calculate yearly profit
   op_exp = nri = rnorm(15, mean = 2.25, sd = .3)
   year_exp = oil_volume*op_exp
-  
   year_profit = final_rev-year_exp
-  #print (final_rev)
-  
   vec = rep(1.1,15)
   wacc = vec^seq(1,15)
   all_years = year_profit/wacc
+  
+  #determine profit for next 15 years
   total = sum(all_years)
   done[i] = total-initial_exp
-  #print (done)
 }
 
+#evaluate results
 hist(done)
 summary(done)
