@@ -41,7 +41,9 @@ library(mclust)
 #Alter Variable Types
 
 nrc_total <- get_sentiments("afinn")
-listings <- read.csv("C:\\Users\\pseco\\Downloads\\boston-airbnb-open-data\\listings.csv")
+listings <- read.csv("C:\\Users\\pseco\\Downloads\\boston-airbnb-open-data\\listings.csv", stringsAsFactors = FALSE)
+listings$price=as.numeric(gsub('\\$','',listings$price))
+
 reviews <- read.csv("C:\\Users\\pseco\\Downloads\\boston-airbnb-open-data\\reviews.csv")
 reviews$comments <- as.character(reviews$comments)
 reviews$reviewer_name <- as.character(reviews$reviewer_name)
@@ -51,7 +53,7 @@ glimpse(reviews)
 
 listings_imprtnt <- select(listings, c("id","host_is_superhost",
                                        "neighbourhood_cleansed","latitude","longitude",
-                                       "property_type", "room_type","price", "weekly_price", "monthly_price",
+                                       "property_type", "room_type","price", "weekly_price", "monthly_price", "beds",
                                        "availability_365","review_scores_rating","review_scores_accuracy", "review_scores_value",
                                        "reviews_per_month"))
 
@@ -87,26 +89,32 @@ listing_complt$avg <- scale(listing_complt$avg) #standardize the score
 
 names(listings_imprtnt)[1] <- "listing_id"
 
-#Standardize Clustering input variables
-listings_combnd$price <- as.numeric(listings_combnd$price)
-
+#Merge listing_complt and listings_imprtnt to create table with all desired dimensions
+#change variable price to appropiate type and subset so there are no places with 0 beds
 listings_combnd <- listing_complt %>% left_join(listings_imprtnt,"listing_id")
+listings_combnd$price <- as.numeric(listings_combnd$price)
+listings_combnd <-  subset(listings_combnd, listings_combnd$beds > 0)
+
+
+#Standardize input  clustering variables
+
+listings_combnd$beds <- as.numeric(listings_combnd$beds) 
 listings_combnd$std.lat <- scale(listings_combnd$latitude)
 listings_combnd$std.lon <- scale(listings_combnd$longitude)
 listings_combnd$avg.std <- scale(listings_combnd$avg)
 listings_combnd$std.reivew_scores_rating <- scale(listings_combnd$review_scores_rating)
 listings_combnd$price.std <- scale(listings_combnd$price)
+listings_combnd$price_per_bed.std <- scale(listings_combnd$price/listings_combnd$beds)
+
+
 
 cor_matrix <- cor(select_if(listings_combnd, is.numeric), method = "pearson")
 corrplot(cor_matrix)
 
-plot(pairs(listings_combnd, lower.panel = NULL))
-
-
 #create Matrix with Standardized "avg score", "Long", "Lat" variables
 #Input Standardized cluster variables here
 
-toC<- cbind(listings_combnd$price.std, listings_combnd$avg.std, listings_combnd$std.reivew_scores_rating, listings_combnd$std.lon, listings_combnd$std.lat  )
+toC<- cbind(listings_combnd$price.std, listings_combnd$avg.std, listings_combnd$std.lon, listings_combnd$std.lat)
 #####KMeans Clustering##########
 #use toC matrix to determine the appropiate number of clusters
 
@@ -117,7 +125,7 @@ fviz_nbclust(toC, kmeans, method="silhouette") #n cluster appropiate
 #clusters for listing sentiment, longitude, latitude
 #Output KMeans object
 
-km_clust <- kmeans(toC,3,nstart = 25)
+km_clust <- kmeans(toC,5,nstart = 25)
 
 #create Data Frame with location data and cluster information
 
@@ -194,19 +202,24 @@ hist(Boston_cluster_table_2$price)
 
 #Subset the clustered Boston data by specific variable values
 
-Boston_cluster_table_2 <- subset(Boston_cluster_table, Boston_cluster_table$`km_clust$cluster`==2 & Boston_cluster_table$avg<=0)
+Boston_cluster_table_2 <- subset(Boston_cluster_table, Boston_cluster_table$`km_clust$cluster`==3 & Boston_cluster_table$avg<=0)
 
 
                                                
 
 #####Summarise Clusted Data######
 
-Clust_Sum_tbl <- summarise(group_by(Boston_cluster_table_2, `km_clust$cluster`, listing_id), med_price = median(price),
-                                                                                           med_rating = median(review_scores_value),  
+listings_Sum_tbl <- summarise(group_by(Boston_cluster_table_2, `km_clust$cluster`, listing_id), med_price = median(price),
+                                                                                           med_rating = mean(review_scores_value),  
                                                                                            scld_sentimnt_score = avg,
                                                                                            neighborhood = neighbourhood_cleansed,
                                                                                            avg_reviews = reviews_per_month)
 
+neighborhood_sum_table <- summarise(group_by(Boston_cluster_table_2, neighbourhood_cleansed), med_price = median(price),
+                                    med_rating = mean(review_scores_value),  
+                                    scld_sentimnt_score = median(avg),
+                                    avg_reviews = mean(reviews_per_month),
+                                    obs_count = n())
 
 
 
