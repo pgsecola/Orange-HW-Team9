@@ -1,0 +1,91 @@
+##############################
+####Survival Analysis HW 3####
+##############################
+
+library(survival)
+library(survminer)
+library(flexsurv)
+library(dplyr)
+
+pump<- read.csv("katrina.csv", header = TRUE)
+
+#Fit AFT model first, choose the best distribution
+#weibull: fit1
+fit1 <- flexsurvreg(Surv(time = hour, event = reason %in% c(2, 3)) ~backup+ bridgecrane+ servo
+                    +trashrack+ elevation+ slope+ age, data = pump, dist = "weibull")
+plot(fit1, type = "cumhaz", ci = TRUE, conf.int = FALSE, las = 1, bty = "n",
+     xlab = "hour", ylab = "cumulative hazard", main = "Weibull Distribution", xmax = 15)
+#exponential: fit2
+fit2 <- flexsurvreg(Surv(time = hour, event = reason %in% c(2, 3)) ~backup+ bridgecrane+ servo
+                    +trashrack+ elevation+ slope+ age, data = pump, dist = "exponential")
+plot(fit2, type = "cumhaz", ci = TRUE, conf.int = FALSE, las = 1, bty = "n",
+     xlab = "hour", ylab = "cumulative hazard", main = "exponential Distribution")
+#lognormal: fit3
+fit3 <- flexsurvreg(Surv(time = hour, event = reason %in% c(2, 3)) ~backup+ bridgecrane+ servo
+                    +trashrack+ elevation+ slope+ age, data = pump, dist = "lognormal")
+plot(fit3, type = "cumhaz", ci = TRUE, conf.int = FALSE, las = 1, bty = "n",
+     xlab = "hour", ylab = "cumulative hazard", main = "lognormal Distribution")
+#log-logistic: fit4
+fit4 <- flexsurvreg(Surv(time = hour, event = reason %in% c(2, 3)) ~backup+ bridgecrane+ servo
+                    +trashrack+ elevation+ slope+ age, data = pump, dist = "llogis")
+plot(fit4, type = "cumhaz", ci = TRUE, conf.int = FALSE, las = 1, bty = "n",
+     xlab = "hour", ylab = "cumulative hazard", main = "log-logistic Distribution")
+
+#because none of the distribution fit the error well, we create do AFT model
+#Now let's play around with cox ph model
+
+#Cox regression model
+#create ID
+pump$ID <- 1:nrow(pump)
+#fit proportional hazards model using coxph()
+fit_cox <- coxph(Surv(time = hour, event = reason %in% c(2, 3)) ~ backup+ bridgecrane+ servo
+                 +trashrack+ elevation+ slope+ age, data = pump)
+summary(fit_cox)
+exp(fit_cox$coefficients)
+#reference population
+fit_cox$means
+
+# plot survival curve
+pump_sub <- pump[which(pump$reason=="2"|pump$reason=="3"),]
+pump_reason23 <- survfit(Surv(time = hour, event = survive==0) ~ reason, data = pump_sub)
+ggsurvplot(pump_reason23, conf.int = FALSE)
+
+### checking PH with schoenfeld residuals
+# testing correlation of residuals with time
+fit_zph <- cox.zph(fit_cox, transform = "km")
+fit_zph
+# zph plots
+#backup
+plot(fit_zph, var = "backup")
+abline(h = 0, col = "red") # reference line at 0 
+abline(h = fit_cox$coef["backup"], col = "purple", lty = 2, lwd = 2) # model estimate
+#bridgecrane
+plot(fit_zph, var = "bridgecrane")
+abline(h = 0, col = "red") # reference line at 0 
+abline(h = fit_cox$coef["bridgecrane"], col = "purple", lty = 2, lwd = 2) # model estimate
+#servo
+plot(fit_zph, var = "servo")
+abline(h = 0, col = "red") # reference line at 0 
+abline(h = fit_cox$coef["servo"], col = "purple", lty = 2, lwd = 2) # model estimate
+#trashrack
+plot(fit_zph, var = "trashrack")
+abline(h = 0, col = "red") # reference line at 0 
+abline(h = fit_cox$coef["trashrack"], col = "purple", lty = 2, lwd = 2) # model estimate
+#elevation
+plot(fit_zph, var = "elevation")
+abline(h = 0, col = "red") # reference line at 0 
+abline(h = fit_cox$coef["elevation"], col = "purple", lty = 2, lwd = 2) # model estimate
+#slope
+plot(fit_zph, var = "slope")
+abline(h = 0, col = "red") # reference line at 0 
+abline(h = fit_cox$coef["slope"], col = "purple", lty = 2, lwd = 2) # model estimate
+#age
+plot(fit_zph, var = "age")
+abline(h = 0, col = "red") # reference line at 0 
+abline(h = fit_cox$coef["age"], col = "purple", lty = 2, lwd = 2) # model estimate
+
+###Last question
+library(tidyverse)
+pump_gather <- pump %>%
+  gather(hours, pumping, h1:h48) %>%
+  group_by(ID)
