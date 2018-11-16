@@ -5,6 +5,9 @@ library(ks)
 library(triangle)
 library(nortest)
 library(ggplot2)
+library(truncnorm)
+install.packages('Bernoulli')
+library(bern)
 simfile = read_excel('Analysis_Data.xlsx', sheet = 2, skip = 2)
 as.Date(simfile$Date, origin="1960-01-01")
 simfile$year = year(simfile$Date)
@@ -20,6 +23,7 @@ recent$`Arithmetic Return - Dry Well`=  as.numeric(recent$`Arithmetic Return - D
 
 #get initial costs for 2006
 initial_cost = rowMeans(recent[16,2:4])
+initial_cost = 1000*initial_cost
 
 #All changes combined in one vector of 48 observations
 combined = c(recent$`Arithmetic Return - Crude Oil`,recent$`Arithmetic Return - Natural Gas`, recent$`Arithmetic Return - Dry Well`)
@@ -34,7 +38,7 @@ qqplot(combined)
 #create initial distribution
 
 #simulation loop to develop cost for 2019 using kernel density
-ntimes = 1000000
+ntimes = 10000
 cost2019 = rep(NA, ntimes)
 Density.x4 <- density(combined, bw="SJ-ste")
 for(j in 1:ntimes){
@@ -58,7 +62,7 @@ ggplot(cost_sim_1,aes(cost_sim_1$cost2019))+
 
 
 #simulation loop to develop cost for 2019 using normal distribution
-ntimes = 1000000
+ntimes = 10000
 cost2019_norm = rep(NA, ntimes)
 for(j in 1:ntimes){
   set.seed(j)
@@ -84,8 +88,6 @@ ggplot(cost_sim_1_norm,aes(cost_sim_1_norm$cost2019))+
 
 
 #using code from class to generate simulation for correlated inputs
-R <- matrix(data=cbind(1,0.64, 0.64, 1), nrow=2)
-U <- t(chol(R))
 
 standardize <- function(x){
   x.std = (x - mean(x))/sd(x)
@@ -107,27 +109,40 @@ for(i in 1:ntimes){
   seismic_sections = rnorm(n=1, mean=3, sd=.35)
   seismic_cost = 43000
   completion_cost = rnorm(n=1, mean=390000, sd=50000)
-  overhead = rtriangle(1, 172000, 279500, 215000)
   Est.x4 <-rnorm(n=6, mean=mean(combined), sd=sd(combined))
   Est.x5<-rtriangle(3, -0.22 , -0.07, -0.0917)
   Est.x6<-rtriangle(4, 0.02 , 0.06, 0.05)
   x7=c(Est.x4,Est.x5,Est.x6,recursive=TRUE)
   cost2019_norm<-initial_cost*(prod(1+x7))
-  initial_exp = leased_acres*acre_cost+seismic_sections*seismic_cost+completion_cost+overhead+cost2019_norm
-  
+  initial_exp = leased_acres*acre_cost+seismic_sections*seismic_cost+completion_cost+cost2019_norm
   #calculating oil production/volume
-  m = 6
-  s = .28
-  location <- log(m^2 / sqrt(s^2 + m^2))
-  shape <- sqrt(log(1 + (s^2 / m^2)))
-  ip = rlnorm(15, meanlog = location, sdlog = shape)
-  decline_rate = runif(15, min = 0.15, max = 0.32)
+  ip = rlnorm(30, 6, .28)
+  decline_rate = runif(30, min = 0.15, max = 0.32)
+  #x = rlnorm(15, 6, .28)
+  R <- matrix(data=cbind(1,0.64, 0.64, 1), nrow=2)
+  U <- t(chol(R))
   Both.r <- cbind(standardize(ip), standardize(decline_rate))
   SB.r <- U %*% t(Both.r)
   SB.r <- t(SB.r)
   final.SB.r <- cbind(destandardize(SB.r[,1], ip), destandardize(SB.r[,2], decline_rate))
-  final_year_rate = (1-decline_rate)*ip
-  oil_volume = (365*final_year_rate*ip)/2
+  #new_ip = exp(ip)
+  #final_year_rate = (1-decline_rate)*ip
+  ip = final.SB.r[1,1]
+  decline_rate = final.SB.r[1,2]
+  
+  end_year_rate = (1-decline_rate)*ip
+  yearly_rates = rep(NA, 15)
+  oil_volume = rep(NA, 15) 
+  yearly_rates[1] = ip
+  new_ip = ip
+  for (z in 2:16){
+    yearly_rates[z] = new_ip*(1-decline_rate)
+    new_ip = yearly_rates[z]
+    oil_volume[z-1] = 365*((new_ip+yearly_rates[z-1])/2)
+  }
+  #print (yearly_rates)
+  #print (oil_volume)
+  #oil_volume = 365*((final_year_rate+ip)/2)
   
   #calculate oil prices
   oil_prices = read_excel('Analysis_Data.xlsx', sheet = 1, skip = 2)
@@ -138,12 +153,14 @@ for(i in 1:ntimes){
   nri = rnorm(1, mean = .75, sd = .02)
   
   oil_rev = total_rev*nri
-  tax = 0.06
+  tax = 0.046
   final_rev = oil_rev*(1-tax)
   
   #calculate yearly profit
+  overhead = rtriangle(1, 172000, 279500, 215000)
+  final_overhead = rep(overhead,15)
   op_exp = nri = rnorm(15, mean = 2.25, sd = .3)
-  year_exp = oil_volume*op_exp
+  year_exp = oil_volume*op_exp+final_overhead
   year_profit = final_rev-year_exp
   vec = rep(1.1,15)
   wacc = vec^seq(1,15)
@@ -155,5 +172,66 @@ for(i in 1:ntimes){
 }
 
 #evaluate results
-hist(done)
 summary(done)
+
+fifth_perc = quantile(done, probs = .05)
+fifth_perc = fifth_perc/1000000
+#hist(done/1000)
+sd(done)
+done_plot=as.data.frame(done/1000000)
+ggplot(done_plot,aes(done_plot$done))+
+  geom_histogram(breaks=seq(-8,60,by=0.1),fill='skyblue2')+
+  geom_vline(aes(xintercept = fifth_perc),col='red',size=0.5) +
+  scale_x_continuous(breaks=seq(0,40,5)) +
+  ggtitle("NPV Distribution")+   
+  xlab("NPV (Millions)")+ylab("Frequency")+ 
+  theme_bw()+ theme(plot.title = element_text(hjust = 0.5,size=22),         
+  axis.title=element_text(size=18), axis.text = element_text(size=18,lineheight = 5))
+
+
+
+################## HW 3 ##################################
+ntimes = 1000000
+probs = rep(NA, ntimes)
+hydro = rep(NA, ntimes)
+reser = rep(NA, ntimes)
+for (k in 1:ntimes){
+  hydrocarbon = rtruncnorm(1, a=0, b=1, mean = .99, sd = .05)
+  hydro[k] = hydrocarbon
+  reservoir = rtruncnorm(1, a=0, b=1, mean = .8, sd = .1)
+  reser[k] = reservoir
+  wells = runif(1, min = 10, max = 30)
+  prob_wet = hydrocarbon*reservoir
+  bernoulli_dist = rbinom(wells, size = 1, prob = prob_wet)
+  wet_wells = sum(bernoulli_dist)
+  sample_prob =  wet_wells/(floor(wells))
+  probs[k] = sample_prob
+}
+hist(probs)
+summary(probs)
+
+probs_plot=as.data.frame(probs)
+ggplot(probs_plot,aes(probs_plot$probs))+
+  geom_histogram(breaks=seq(0,1,by=0.04),fill='skyblue2')+
+  ggtitle("Probability of a Wet Well")+   
+  xlab("Probability")+ylab("Frequency")+ 
+  theme_bw()+ theme(plot.title = element_text(hjust = 0.5,size=22),         
+  axis.title=element_text(size=18), axis.text = element_text(size=18,lineheight = 5))
+
+
+res_plot=as.data.frame(reser)
+ggplot(res_plot,aes(res_plot$reser))+
+  geom_histogram(breaks=seq(0,1,by=0.01),fill='skyblue2')+
+  ggtitle("Probability of a Reservoir")+   
+  xlab("Probability")+ylab("Frequency")+ 
+  theme_bw()+ theme(plot.title = element_text(hjust = 0.5,size=22),         
+  axis.title=element_text(size=18), axis.text = element_text(size=18,lineheight = 5))
+
+
+hydro_plot=as.data.frame(hydro)
+ggplot(hydro_plot,aes(hydro_plot$hydro))+
+  geom_histogram(breaks=seq(0,1,by=0.01),fill='skyblue2')+
+  ggtitle("Probability of a Hydrocarbon")+   
+  xlab("Probability")+ylab("Frequency")+ 
+  theme_bw()+ theme(plot.title = element_text(hjust = 0.5,size=22),         
+  axis.title=element_text(size=18), axis.text = element_text(size=18,lineheight = 5))
