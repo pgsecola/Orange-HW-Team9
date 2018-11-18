@@ -86,6 +86,24 @@ abline(h = fit_cox$coef["age"], col = "purple", lty = 2, lwd = 2) # model estima
 
 ###Last question
 library(tidyverse)
-pump_gather <- pump %>%
+pump_long <- pump %>%
   gather(hours, pumping, h1:h48) %>%
-  group_by(ID)
+  arrange(ID)%>%
+  mutate(stop=substring(hours, 2)) %>%
+  mutate(stop=as.numeric(stop)) %>%
+  mutate(start=stop-1) %>%
+  mutate(cum_sum=ave(pumping, ID, cumsum(pumping==0),FUN=cumsum)) %>%
+  mutate(rolling = as.numeric(cum_sum>=12))
+
+pump_long <-pump_long %>%
+  mutate(failed= 
+           ifelse(((pump_long$reason==2) & (pump_long$stop==pump_long$hour)),1,0)) 
+
+change_rows = which(pump_long$rolling==0 & dplyr::lag(pump_long$rolling)==1 & pump_long$hours != 'h1')
+pump_long$rolling[change_rows] = 1
+
+
+fit_12 <- coxph(Surv(start, stop, event = failed)~backup+ bridgecrane+ servo
+                + elevation+ slope+ age+ rolling, data = pump_long)
+summary(fit_12)
+
