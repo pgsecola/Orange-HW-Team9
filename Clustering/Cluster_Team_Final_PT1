@@ -42,6 +42,7 @@ library(splines)
 library(mclust)
 library(factoextra)
 
+
 times <- seq(1,295)/100 # Observations in 1/100th of a second
 X <- bs(times,intercept=TRUE,df=60) #create a spline to 
 #model the data
@@ -66,19 +67,24 @@ cdata$POVERTY_RATIO <- as.numeric(cdata$POVERTY_RATIO)
 ############Scaling and PCA########
 #scale data and then perform PCA for columns 2:65 of data
 
-scaled_data <- scale(cdata[,2:65])
-
-pcaOut <-  prcomp(scaled_data)
+pcaOut <-  prcomp(cdata[2:65], scale = FALSE)
 
 pca_data <- pcaOut$x
 
 #Standard Dev for first 5 components
 std_dev <- pcaOut$sdev[1:5]
 std_dev
+
 #45.21508 31.29240 22.37705 17.33125 13.04810
 
-fviz_nbclust(pca_data, kmeans, method="wss") 
-fviz_nbclust(pca_data, kmeans, method="silhouette") # 4 cluster appropiate
+plot(pca_data)
+
+
+############KMeans Clustering############
+#Find Optimum number of clusters thorugh wss and silhouette
+
+fviz_nbclust(pca_data, kmeans, method="wss") # Use 4 clusters
+fviz_nbclust(pca_data, kmeans, method="silhouette") # 2 cluster appropiate
 
 #perform KMeans analysis using optimal number of clusters 
 #clusters for PCA data
@@ -87,19 +93,21 @@ set.seed(12345)
 
 km_clust <- kmeans(pca_data, 4 ,nstart = 25)
 
-cluster_centroids <- km_clust$centers
-
-plot(km_clust$centers)
-
 #assign observations to their respective clusters
 
 Cluster_Table <- cbind.data.frame(cdata,km_clust$cluster)
 
 names(Cluster_Table)[66] <- "cluster_id"
 
-sum_clust_table <- summarise(group_by(Cluster_Table, cluster_id), avg_lung_cap = mean())
+#Determine clusters w/ largest lung capacity
+for(i in 1:6792) {
+  Cluster_Table[i,67] <-  integrate(splinefun(times,X%*%t(betas[i,,drop=F])),min(times),max(times))$`value`
+}
+
+
+clust_sum_table <- summarise(group_by(Cluster_Table, cluster_id), 
+                             total_lung_cap = sum(integrate(spline_func,min(times),max(times))))
 #########Mixture Model#########
-set.seed(12345)
 
 set.seed(12345)
 data_mclust=cdata[,c(10:20)]
@@ -110,3 +118,5 @@ clust6    <- Mclust(data_mclust,G=6,modelNames = "VVV")
 #add the cluster to original data 
 data_mclust$class <- as.factor(clust6$classification)
 
+clustBIC
+plot(clust6$z)
